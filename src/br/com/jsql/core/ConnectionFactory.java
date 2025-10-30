@@ -9,12 +9,15 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
 public class ConnectionFactory {
 	private final Connection connection;
+	private final List<String> params;
+	private final List<Object> values;
 	private PreparedStatement statement;
 	private ResultSet rs;
 	private String sql;
@@ -32,6 +35,8 @@ public class ConnectionFactory {
 			final String user = properties.getProperty("jdbc.user");
 			final String password = properties.getProperty("jdbc.password");
 			connection = DriverManager.getConnection(url, user, password);
+			params = new ArrayList<>();
+			values = new ArrayList<>();
 		} catch (SQLException | IOException e) {
 			throw new RuntimeException(e);
 		}
@@ -43,46 +48,9 @@ public class ConnectionFactory {
 		return properties;
 	}
 
-	public ConnectionFactory insertInto(String table, String... fields) {
-		sql = "INSERT INTO " + table + " (";
-
-		for (String field : fields) {
-			sql += field + ", ";
-		}
-
-		sql += ")";
-
-		if (sql.contains(", )")) {
-			sql = sql.replace(", )", ")");
-		}
-
-		return this;
-	}
-
-	public ConnectionFactory values(Object... objects) {
-		sql += " VALUES (";
-
-		if (objects == null) {
-			throw new NullPointerException("Values is null. You need add not null value.");
-		}
-
-		for (int i = 0; i < objects.length; i++) {
-			sql += "?, ";
-		}
-
-		sql += ")";
-
-		if (sql.contains(", )")) {
-			sql = sql.replace(", )", ")");
-		}
-
-		sql += ";";
-
+	private void prepareValues(List<Object> objects, PreparedStatement statement) {
 		try {
-			statement = connection.prepareStatement(sql);
-
 			int i = 1;
-
 			for (Object object : objects) {
 				if (object instanceof String) {
 					statement.setString(i, (String) object);
@@ -99,10 +67,48 @@ public class ConnectionFactory {
 				if (object instanceof Boolean) {
 					statement.setBoolean(i, (Boolean) object);
 				}
+				i++;
 			}
+		} catch (SQLException e) {
+			throw new RuntimeException(e);
+		}
+	}
 
+	public String formatFields(List<String> fields) {
+		String formattedField = fields.toString().replace("[", "(");
+		formattedField = formattedField.replace("]", ")");
+		return formattedField;
+	}
+
+	public List<String> agroupStatementField(int totalFields) {
+		List<String> statementFields = new ArrayList<>();
+		for (int i = 0; i < totalFields; i++) {
+			statementFields.add("?");
+		}
+
+		return statementFields;
+	}
+
+	public ConnectionFactory insertInto(String table, List<String> fields) {
+		sql = "";
+		sql = "INSERT INTO " + table;
+		sql += formatFields(fields);
+		return this;
+	}
+
+	public ConnectionFactory values(List<Object> objects) {
+		if (objects == null) {
+			throw new NullPointerException("Values is null. You need add not null value.");
+		}
+
+		List<String> statementFields = agroupStatementField(objects.size());
+		sql += " VALUES " + formatFields(statementFields) + ";";
+
+		try {
+			statement = connection.prepareStatement(sql);
+			prepareValues(values, statement);
 			statement.execute();
-			statement.close();
+			this.close();
 		} catch (SQLException e) {
 			throw new RuntimeException(e);
 		}
@@ -115,38 +121,104 @@ public class ConnectionFactory {
 		sql = "SELECT * FROM " + table;
 		return this;
 	}
+	 
+	public ConnectionFactory deleteFrom(String table) {
+		sql = "DELETE FROM " + table;
+		return this;
+	}
 
-	public Map<String, List<Object>> whereGet(String field, String operator, Object value) {
-		sql += " WHERE " + field + " " + operator + " ? ";
+	public ConnectionFactory where() {
+		sql += " WHERE ";
+		return this;
+	}
+
+	public ConnectionFactory param(String param) {
+		sql += param;
+		params.add(param);
+		return this;
+	}
+
+	public ConnectionFactory equalsValue(Object value) {
+		sql += " = ? ";
+		values.add(value);
+		return this;
+	}
+
+	public ConnectionFactory biggerThan(Object value) {
+		sql += " > ? ";
+		values.add(value);
+		return this;
+	}
+
+	public ConnectionFactory smallerThan(Object value) {
+		sql += " < ? ";
+		values.add(value);
+		return this;
+	}
+
+	public ConnectionFactory biggerThanOrEquals(Object value) {
+		sql += " >= ? ";
+		values.add(value);
+		return this;
+	}
+
+	public ConnectionFactory smallerThanOrEquals(Object value) {
+		sql += " =< ? ";
+		values.add(value);
+		return this;
+	}
+
+	public ConnectionFactory differentFrom(Object value) {
+		sql += " <> ? ";
+		values.add(value);
+		return this;
+	}
+
+	public ConnectionFactory likeLeft(Object value) {
+		sql += " LIKE ? ";
+		values.add("%" + value);
+		return this;
+	}
+
+	public ConnectionFactory likeRight(Object value) {
+		sql += " LIKE ? ";
+		values.add(value + "%");
+		return this;
+	}
+
+	public ConnectionFactory like(Object value) {
+		sql += " LIKE ? ";
+		values.add("%" + value + "%");
+		System.out.println(sql);
+		return this;
+	}
+
+	public ConnectionFactory and() {
+		sql += "AND ";
+		return this;
+	}
+	
+	public boolean execute() {
 		try {
 			statement = connection.prepareStatement(sql);
-
-			if (value instanceof String) {
-				statement.setString(1, (String) value);
-			}
-
-			if (value instanceof Integer) {
-				statement.setInt(1, (Integer) value);
-			}
-
-			if (value instanceof Double) {
-				statement.setDouble(1, (Double) value);
-			}
-
-			if (value instanceof Boolean) {
-				statement.setBoolean(1, (Boolean) value);
-			}
-
-			return this.get();
+			prepareValues(values, statement);
+			values.clear();
+			params.clear();
+			statement.execute();
+			this.close();
+			return true;
 		} catch (SQLException e) {
 			throw new RuntimeException(e);
 		}
 	}
 
-	public Map<String, List<Object>> get() throws SQLException {
+	public Map<String, List<Object>> response() throws SQLException {
 		if (statement == null) {
 			sql += ";";
 			statement = connection.prepareStatement(sql);
+			if (params.size() == values.size() && values.size() > 0) {
+				prepareValues(values, statement);
+			}
 		}
 
 		if (statement != null) {
@@ -167,7 +239,28 @@ public class ConnectionFactory {
 				map.get(md.getColumnName(i)).add(rs.getObject(i));
 			}
 		}
-
+		
+		values.clear();
+		params.clear();
+		this.close();
 		return map;
+	}
+
+	public void close() {
+		try {
+			if (rs != null && !rs.isClosed()) {
+				rs.close();
+			}
+			
+			if (statement != null && !statement.isClosed()) {
+				statement.close();
+			}
+			
+			if (connection != null && !connection.isClosed()) {
+				connection.close();
+			}
+		} catch (SQLException e) {
+			throw new RuntimeException(e);
+		}
 	}
 }
