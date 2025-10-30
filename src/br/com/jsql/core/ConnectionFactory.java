@@ -14,6 +14,25 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
+/**
+ * <p>
+ * Classe responsável por gerir todas a conexão com a base de dados MySQL. Toda a conexão é feita
+ * <p>
+ * usando um arquivo <strong>.properties</strong>.
+ * 
+ * <p>
+ * A classe é instanciada já iniciando tudo que precisa para funcionar:
+ * 
+ * <p>
+ * - Conexão
+ * - Load dos properties
+ * 
+ * @author joao
+ * @since 0.2
+ * @version 0.2
+ * */
+
+
 public class ConnectionFactory {
 	private final Connection connection;
 	private final List<String> params;
@@ -41,13 +60,30 @@ public class ConnectionFactory {
 			throw new RuntimeException(e);
 		}
 	}
-
+	
+	/**
+	 * <p>
+	 * Essa função carrega o .properties, desde que esteja dentro da pasta
+	 * <p>
+	 * <strong>src</strong> (Isso será fixado no futuro)
+	 * @see #getPropertiesFile(String)
+	 * **/
 	private Properties getPropertiesFile(String propertyFile) throws IOException {
 		Properties properties = new Properties();
 		properties.load(ConnectionFactory.class.getResourceAsStream(propertyFile));
 		return properties;
 	}
-
+	
+	/**
+	 * Essa função faz a injeção dos parâmetros no PreparedStatement.
+	 *
+	 *<p>
+	 * - Faz casting de objeto para String, Double, Integer e Boolean
+	 *<p>
+	 * - Conta o total de <strong>index (i)</strong> que o Statement vai ter
+	 * 
+	 * @see #prepareValues(List, PreparedStatement)
+	 * **/
 	private void prepareValues(List<Object> objects, PreparedStatement statement) {
 		try {
 			int i = 1;
@@ -74,12 +110,34 @@ public class ConnectionFactory {
 		}
 	}
 
+	/**
+	 * Essa função faz a formatação de uma lista de parâmetros para:
+	 * 
+	 * <p>
+	 * [name, price]
+	 * 
+	 * <p>
+	 * (name, price)
+	 * 
+	 * @see #formatFields(List)
+	 * **/
 	public String formatFields(List<String> fields) {
 		String formattedField = fields.toString().replace("[", "(");
 		formattedField = formattedField.replace("]", ")");
 		return formattedField;
 	}
-
+	
+	/**
+	 * Essa função faz a formatação de uma lista de Statements para:
+	 * 
+	 * <p>
+	 * []
+	 * 
+	 * <p>
+	 * (?, ?)
+	 * 
+	 * @see #agroupStatementField(int)
+	 * **/
 	public List<String> agroupStatementField(int totalFields) {
 		List<String> statementFields = new ArrayList<>();
 		for (int i = 0; i < totalFields; i++) {
@@ -123,6 +181,7 @@ public class ConnectionFactory {
 	}
 	 
 	public ConnectionFactory deleteFrom(String table) {
+		sql = "";
 		sql = "DELETE FROM " + table;
 		return this;
 	}
